@@ -3,9 +3,9 @@ package ginuser
 import (
 	"go-api/common"
 	"go-api/component/appctx"
+	userbusiness "go-api/module/user/business"
 	usermodel "go-api/module/user/model"
 	userstorage "go-api/module/user/storage"
-	userbusiness "go-api/module/user/business"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,8 +18,7 @@ func ListUser(appCtx appctx.AppContext) gin.HandlerFunc {
 		var paging common.Paging
 
 		if err := c.ShouldBind(&paging); err != nil {
-			c.JSON(http.StatusBadRequest, common.SimpleSuccessResponse(err))
-			return
+			panic(common.ErrInvalidRequest(err))
 		}
 
 		paging.Fulfill()
@@ -27,22 +26,20 @@ func ListUser(appCtx appctx.AppContext) gin.HandlerFunc {
 		var filter usermodel.Filter
 
 		if err := c.ShouldBind(&filter); err != nil {
-			c.JSON(http.StatusBadRequest, common.SimpleSuccessResponse(err))
-			return
+			panic(common.ErrInvalidRequest(err))
 		}
 
-		var data []usermodel.User
+		var response []usermodel.User
 
-		store := userstorage.NewStore(db)
-		business := userbusiness.NewListUserBusiness(store)
+		storage := userstorage.NewStorage(db)
+		business := userbusiness.NewListUserBusiness(storage)
 
-		data, err := business.ListUser(c.Request.Context(), &filter, &paging)
+		response, err := business.ListUser(c.Request.Context(), &filter, &paging)
 
 		if err != nil {
-			c.JSON(http.StatusBadRequest, common.SimpleErrorResponse(err))
-			return
+			panic(err)
 		}
 
-		c.JSON(http.StatusOK, common.NewSuccessResponse(data, paging, filter))
+		c.JSON(http.StatusOK, common.NewSuccessResponse(response, paging, filter))
 	}
 }

@@ -2,53 +2,53 @@ package userbusiness
 
 import (
 	"context"
-	"errors"
+	"go-api/common"
 	usermodel "go-api/module/user/model"
 )
 
-type CreateUserStore interface {
-	FindDataWithConditions(context context.Context, conditions map[string]interface{}, moreKeys ...string) (*usermodel.User, error)
-	Create(context context.Context, data *usermodel.UserCreateRequest) error
+type CreateUserStorage interface {
+	Find(context context.Context, conditions map[string]interface{}, moreInfo ...string) (*usermodel.User, error)
+	Create(context context.Context, data *usermodel.UserCreate) (*usermodel.User, error)
 }
 
 type createUserBusiness struct {
-	store CreateUserStore
+	storage CreateUserStorage
 }
 
-func NewCreateUserBusiness(store CreateUserStore) *createUserBusiness {
-	return &createUserBusiness{store: store}
+func NewCreateUserBusiness(storage CreateUserStorage) *createUserBusiness {
+	return &createUserBusiness{storage: storage}
 }
 
-func (business *createUserBusiness) CreateUser(context context.Context, data *usermodel.UserCreateRequest) (*usermodel.UserCreateResponse, error) {
+func (business *createUserBusiness) CreateUser(context context.Context, data *usermodel.UserCreate) (*usermodel.User, error) {
 	conditions := map[string]interface{}{
 		"email": data.Email,
 	}
 
+	_, err := business.storage.Find(context, conditions)
+
+	if err == nil {
+		// if user.IsLocked {
+		// 	return nil, common.ErrEntityIsLocked(usermodel.EntityName, nil)
+		// }
+
+		return nil, usermodel.ErrEmailExisted
+	}
+
+	if err != common.ErrRecordNotFound {
+		return nil, common.ErrDB(err)
+	}
+
 	if err := data.Validate(); err != nil {
-		return nil, err
+		return nil, common.ErrInvalidRequest(err)
 	}
 
-	if user, err := business.store.FindDataWithConditions(context, conditions); err == nil || user != nil {
-		return nil, ErrEmailAlreadyExists
+	user, err := business.storage.Create(context, data)
+
+	if err != nil {
+		return nil, common.ErrCannotCreateEntity(usermodel.EntityName, err)
 	}
 
-	if err := business.store.Create(context, data); err != nil {
-		return nil, err
-	}
+	user.Mask(false)
 
-	response := &usermodel.UserCreateResponse{
-		ID:        data.ID,
-		FirstName: data.FirstName,
-		LastName:  data.LastName,
-		Email:     data.Email,
-		Phone:     data.Phone,
-		Password:  data.Password,
-		CreatedAt: data.CreatedAt,
-	}
-
-	return response, nil
+	return user, nil
 }
-
-var (
-	ErrEmailAlreadyExists = errors.New("email already exists")
-)

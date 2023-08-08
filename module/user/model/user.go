@@ -7,44 +7,73 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
+const (
+	EntityName = "User"
+	TableName  = "users"
+)
+
 type User struct {
 	common.BaseModel `json:",inline"`
-	FirstName        string  `json:"first_name" gorm:"column:first_name;type:varchar(128);not null"`
-	LastName         string  `json:"last_name" gorm:"column:last_name;type:varchar(128);not null"`
-	Avatar           *string `json:"avatar" gorm:"column:avatar;default:null"`
-	Phone            string  `json:"phone" gorm:"column:phone;type:varchar(10);not null"`
-	Email            string  `json:"email" gorm:"column:email;type:varchar(256);not null"`
-	Password         string  `json:"-" gorm:"column:password;not null"`
-	IsLocked         bool    `json:"is_locked" gorm:"column:is_locked;default:false"`
-	VerificationCode *string `json:"-" gorm:"column:verification_code;default:null"`
-	Verified         bool    `json:"verified" gorm:"column:verified;default:false"`
-	Token            *string `json:"-" gorm:"column:token;default:null"`
+	FirstName        string        `json:"first_name" gorm:"column:first_name;type:varchar(128);not null"`
+	LastName         string        `json:"last_name" gorm:"column:last_name;type:varchar(128);not null"`
+	Avatar           *common.Image `json:"avatar" gorm:"column:avatar;type:jsonb;default:null"`
+	Phone            string        `json:"phone" gorm:"column:phone;type:varchar(10);not null"`
+	Email            string        `json:"email" gorm:"column:email;type:varchar(256);not null"`
+	Password         string        `json:"-" gorm:"column:password;type:text;not null"`
+	IsLocked         bool          `json:"is_locked" gorm:"column:is_locked;default:false"`
+	VerificationCode *string       `json:"-" gorm:"column:verification_code;type:text;default:null"`
+	Verified         bool          `json:"verified" gorm:"column:verified;default:false"`
+	Token            *string       `json:"-" gorm:"column:token;default:null"`
+	Role             string        `json:"role" gorm:"column:role;type:varchar(32);default:'user'"`
 }
 
-func (User) TableName() string { return "users" }
+func (User) TableName() string { return TableName }
 
-type UserCreateRequest struct {
-	ID              uuid.UUID `json:"-" gorm:"column:id;type:uuid;primary_key;default:gen_random_uuid()"`
-	FirstName       string    `json:"first_name" binding:"required" gorm:"column:first_name"`
-	LastName        string    `json:"last_name" binding:"required" gorm:"column:last_name"`
-	Email           string    `json:"email" binding:"required" gorm:"column:email"`
-	Phone           string    `json:"phone" binding:"required" gorm:"column:phone"`
-	Password        string    `json:"password" binding:"required" gorm:"column:password"`
-	ConfirmPassword string    `json:"confirm_password" binding:"required" gorm:"-:all"`
-	CreatedAt       time.Time `json:"-" gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt       time.Time `json:"-" gorm:"column:updated_at;autoUpdateTime"`
+func (u *User) Mask(isAdmin bool) {
+	u.FakeID = common.EncodeUID(u.ID)
 }
 
-func (UserCreateRequest) TableName() string { return User{}.TableName() }
+func (u *User) BeforeCreate(tx *gorm.DB) error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
 
-func (u *UserCreateRequest) Validate() error {
+	if err != nil {
+		return err
+	}
+
+	u.Password = string(hashedPassword)
+
+	return nil
+}
+
+func (u *User) BeforeUpdate(tx *gorm.DB) error {
+	if u.Password != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+
+		if err != nil {
+			return err
+		}
+
+		u.Password = string(hashedPassword)
+	}
+
+	return nil
+}
+
+type UserCreate struct {
+	FirstName       string `json:"first_name"`
+	LastName        string `json:"last_name"`
+	Email           string `json:"email"`
+	Phone           string `json:"phone"`
+	Password        string `json:"password"`
+	ConfirmPassword string `json:"confirm_password"`
+}
+
+func (u UserCreate) Validate() error {
 	u.FirstName = strings.TrimSpace(u.FirstName)
 
 	if u.FirstName == "" {
@@ -104,46 +133,69 @@ func (u *UserCreateRequest) Validate() error {
 	return nil
 }
 
-func (u *UserCreateRequest) BeforeCreate(tx *gorm.DB) error {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+type UserUpdate struct {
+	FirstName       *string       `json:"first_name"`
+	LastName        *string       `json:"last_name"`
+	Avatar          *common.Image `json:"avatar"`
+	Phone           *string       `json:"phone"`
+	Password        *string       `json:"password"`
+	ConfirmPassword *string       `json:"confirm_password"`
+}
 
-	if err != nil {
-		return err
+func (u UserUpdate) Validate() error {
+	if u.FirstName != nil {
+		*u.FirstName = strings.TrimSpace(*u.FirstName)
+		if *u.FirstName == "" {
+			return ErrFirstNameIsEmpty
+		}
+
+		if strings.ContainsAny(*u.FirstName, "!@#$%^&*()_+{}|:<>?0123456789") {
+			return ErrFirstNameIsInvalid
+		}
 	}
 
-	u.Password = string(hashedPassword)
+	if u.LastName != nil {
+		*u.LastName = strings.TrimSpace(*u.LastName)
+		if *u.LastName == "" {
+			return ErrLastNameIsEmpty
+		}
+
+		if strings.ContainsAny(*u.LastName, "!@#$%^&*()_+{}|:<>?0123456789") {
+			return ErrLastNameIsInvalid
+		}
+	}
+
+	if u.Phone != nil {
+		*u.Phone = strings.TrimSpace(*u.Phone)
+		if *u.Phone == "" {
+			return ErrPhoneIsEmpty
+		}
+
+		if _, err := strconv.Atoi(*u.Phone); err != nil || len(*u.Phone) != 10 {
+			return ErrPhoneIsInvalid
+		}
+	}
+
+	if u.Password != nil {
+		if !regexp.MustCompile(`^[^ ]{8,32}$`).MatchString(*u.Password) {
+			return ErrPasswordIsInvalid
+		}
+
+		if u.ConfirmPassword == nil {
+			return ErrConfirmPasswordIsEmpty
+		}
+
+		if *u.Password != *u.ConfirmPassword {
+			return ErrPasswordNotMatch
+		}
+	}
 
 	return nil
 }
 
-type UserCreateResponse struct {
-	ID        uuid.UUID `json:"id"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
-	Email     string    `json:"email"`
-	Phone     string    `json:"phone"`
-	Password  string    `json:"password"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-type UserUpdateRequest struct {
-	FirstName       *string   `json:"first_name" gorm:"column:first_name"`
-	LastName        *string   `json:"last_name" gorm:"column:last_name"`
-	Phone           *string   `json:"phone" gorm:"column:phone"`
-	Password        *string   `json:"password" gorm:"column:password"`
-	ConfirmPassword *string   `json:"confirm_password" gorm:"-:all"`
-	UpdatedAt       time.Time `json:"-" gorm:"column:updated_at;autoUpdateTime"`
-}
-
-func (UserUpdateRequest) TableName() string { return User{}.TableName() }
-
-type UserUpdateResponse struct {
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
-	Password  string `json:"password"`
-	UpdatedAt string `json:"updated_at"`
+type UserLogin struct {
+	Email    string `json:"email" form:"email"`
+	Password string `json:"password" form:"password"`
 }
 
 var (
@@ -160,4 +212,22 @@ var (
 	ErrEmailIsInvalid     = errors.New("email is invalid")
 	ErrPhoneIsInvalid     = errors.New("phone is invalid")
 	ErrPasswordIsInvalid  = errors.New("password is invalid")
+
+	ErrEmailExisted = common.NewCustomErrorResponse(
+		errors.New("email has already existed"),
+		"email has already existed",
+		"ErrEmailExisted",
+	)
+
+	ErrUserIsLocked = common.NewCustomErrorResponse(
+		errors.New("user is locked"),
+		"user is locked",
+		"ErrUserIsLocked",
+	)
+
+	ErrEmailOrPasswordIsIncorrect = common.NewCustomErrorResponse(
+		errors.New("email or password is incorrect"),
+		"email or password is incorrect",
+		"ErrEmailOrPasswordIsIncorrect",
+	)
 )

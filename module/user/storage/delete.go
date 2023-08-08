@@ -7,15 +7,18 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s *store) Delete(context context.Context, id uuid.UUID) error {
+func (s *storage) Delete(context context.Context, id uuid.UUID) error {
 	tx := s.db.Begin()
 
-	if err := tx.Table(usermodel.User{}.TableName()).Where("id = ?", id).Updates(map[string]interface{}{"status": 0}).Error; err != nil {
+	if err := tx.Table(usermodel.TableName).Where("id = ?", id).Updates(map[string]interface{}{"status": 0}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		return err
+	}
 
 	return nil
 }

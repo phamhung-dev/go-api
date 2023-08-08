@@ -2,38 +2,41 @@ package userbusiness
 
 import (
 	"context"
-	"errors"
+	"go-api/common"
 	usermodel "go-api/module/user/model"
 
 	"github.com/google/uuid"
 )
 
-type DeleteUserStore interface {
-	FindDataWithConditions(context context.Context, conditions map[string]interface{}, moreKeys ...string) (*usermodel.User, error)
+type DeleteUserStorage interface {
+	Find(context context.Context, conditions map[string]interface{}, moreInfo ...string) (*usermodel.User, error)
 	Delete(context context.Context, id uuid.UUID) error
 }
 
 type deleteUserBusiness struct {
-	store DeleteUserStore
+	storage DeleteUserStorage
 }
 
-func NewDeleteUserBusiness(store DeleteUserStore) *deleteUserBusiness {
-	return &deleteUserBusiness{store: store}
+func NewDeleteUserBusiness(storage DeleteUserStorage) *deleteUserBusiness {
+	return &deleteUserBusiness{storage: storage}
 }
 
 func (business *deleteUserBusiness) DeleteUser(context context.Context, id uuid.UUID) error {
 	conditions := map[string]interface{}{"id": id}
-	if user, err := business.store.FindDataWithConditions(context, conditions); err != nil || user == nil {
-		return ErrUserNotFound
+
+	_, err := business.storage.Find(context, conditions)
+
+	if err == common.ErrRecordNotFound {
+		return common.ErrEntityNotFound(usermodel.EntityName, err)
 	}
 
-	if err := business.store.Delete(context, id); err != nil {
-		return err
+	if err != nil {
+		return common.ErrDB(err)
+	}
+
+	if err := business.storage.Delete(context, id); err != nil {
+		return common.ErrCannotDeleteEntity(usermodel.EntityName, err)
 	}
 
 	return nil
 }
-
-var (
-	ErrUserNotFound = errors.New("user not found")
-)

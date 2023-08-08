@@ -13,11 +13,3 @@ func NewSuccessResponse(data, paging, filter interface{}) *successResponse {
 func SimpleSuccessResponse(data interface{}) *successResponse {
 	return &successResponse{Data: data, Paging: nil, Filter: nil}
 }
-
-type errorResponse struct {
-	Error string `json:"error"`
-}
-
-func SimpleErrorResponse(err error) *errorResponse {
-	return &errorResponse{Error: err.Error()}
-}

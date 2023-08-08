@@ -15,21 +15,19 @@ func CreateUser(appCtx appctx.AppContext) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		db := appCtx.GetMainDBConnection()
 
-		var data usermodel.UserCreateRequest
+		var data usermodel.UserCreate
 
 		if err := c.ShouldBind(&data); err != nil {
-			c.JSON(http.StatusBadRequest, common.SimpleErrorResponse(err))
-			return
+			panic(common.ErrInvalidRequest(err))
 		}
 
-		store := userstorage.NewStore(db)
-		business := userbusiness.NewCreateUserBusiness(store)
+		storage := userstorage.NewStorage(db)
+		business := userbusiness.NewCreateUserBusiness(storage)
 
 		response, err := business.CreateUser(c.Request.Context(), &data)
 
 		if err != nil {
-			c.JSON(http.StatusBadRequest, common.SimpleErrorResponse(err))
-			return
+			panic(err)
 		}
 
 		c.JSON(http.StatusOK, common.SimpleSuccessResponse(response))

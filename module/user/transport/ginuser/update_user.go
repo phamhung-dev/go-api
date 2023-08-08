@@ -4,15 +4,16 @@ import (
 	"go-api/common"
 	"go-api/component/appctx"
 	userbusiness "go-api/module/user/business"
+	usermodel "go-api/module/user/model"
 	userstorage "go-api/module/user/storage"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-func DeleteUser(appCtx appctx.AppContext) gin.HandlerFunc {
+func UpdateUser(appctx appctx.AppContext) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		db := appCtx.GetMainDBConnection()
+		db := appctx.GetMainDBConnection()
 
 		id, err := common.DecodeUID(c.Param("id"))
 
@@ -20,14 +21,20 @@ func DeleteUser(appCtx appctx.AppContext) gin.HandlerFunc {
 			panic(common.ErrInvalidRequest(err))
 		}
 
-		storage := userstorage.NewStorage(db)
-		business := userbusiness.NewDeleteUserBusiness(storage)
+		var data usermodel.UserUpdate
 
-		if err := business.DeleteUser(c.Request.Context(), id); err != nil {
-			panic(err)
+		if err := c.ShouldBind(&data); err != nil {
+			panic(common.ErrInvalidRequest(err))
 		}
 
-		response := "delete user successfully"
+		storage := userstorage.NewStorage(db)
+		business := userbusiness.NewUpdateUserBusiness(storage)
+
+		response, err := business.UpdateUser(c.Request.Context(), id, &data)
+
+		if err != nil {
+			panic(err)
+		}
 
 		c.JSON(http.StatusOK, common.SimpleSuccessResponse(response))
 	}

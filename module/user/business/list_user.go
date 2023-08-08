@@ -6,24 +6,28 @@ import (
 	usermodel "go-api/module/user/model"
 )
 
-type ListUserStore interface {
-	ListDataWithCondition(context context.Context, filter *usermodel.Filter, paging *common.Paging, moreKeys ...string) ([]usermodel.User, error)
+type ListUserStorage interface {
+	List(context context.Context, filter *usermodel.Filter, paging *common.Paging, moreInfo ...string) ([]usermodel.User, error)
 }
 
 type listUserBusiness struct {
-	store ListUserStore
+	storage ListUserStorage
 }
 
-func NewListUserBusiness(store ListUserStore) *listUserBusiness {
-	return &listUserBusiness{store: store}
+func NewListUserBusiness(storage ListUserStorage) *listUserBusiness {
+	return &listUserBusiness{storage: storage}
 }
 
 func (business *listUserBusiness) ListUser(context context.Context, filter *usermodel.Filter, paging *common.Paging) ([]usermodel.User, error) {
-	result, err := business.store.ListDataWithCondition(context, filter, paging)
+	users, err := business.storage.List(context, filter, paging)
 
-	if err != nil {
-		return nil, err
+	for i := range users {
+		users[i].Mask(false)
 	}
 
-	return result, nil
+	if err != nil {
+		return nil, common.ErrCannotListEntity(usermodel.EntityName, err)
+	}
+
+	return users, nil
 }

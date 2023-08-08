@@ -10,16 +10,14 @@ import (
 	"gorm.io/gorm"
 )
 
-var connect *gorm.DB
-
-func init() {
+func NewPostgresqlConnection() *gorm.DB {
 	fmt.Println("Connecting to database...")
 
-	host := os.Getenv("DB_HOST")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbname := os.Getenv("DB_NAME")
-	port := os.Getenv("DB_PORT")
+	host := os.Getenv("POSTGRES_HOST")
+	user := os.Getenv("POSTGRES_USER")
+	password := os.Getenv("POSTGRES_PASSWORD")
+	dbname := os.Getenv("POSTGRES_DB")
+	port := os.Getenv("POSTGRES_PORT")
 
 	url := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Ho_Chi_Minh",
@@ -37,11 +35,11 @@ func init() {
 		panic(err)
 	}
 
-	db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
-
-	connect = db.Debug()
+	db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";")
 
 	fmt.Println("Connected to database successfully!")
-}
 
-func GetConnection() *gorm.DB { return connect }
+	db = db.Debug()
+
+	return db
+}

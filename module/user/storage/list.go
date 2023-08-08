@@ -6,20 +6,38 @@ import (
 	usermodel "go-api/module/user/model"
 )
 
-func (s *store) ListDataWithCondition(context context.Context, filter *usermodel.Filter, paging *common.Paging, moreKeys ...string) ([]usermodel.User, error) {
-	var result []usermodel.User
+func (s *storage) List(context context.Context, filter *usermodel.Filter, paging *common.Paging, moreInfo ...string) ([]usermodel.User, error) {
+	var users []usermodel.User
 
-	db := s.db.Table(usermodel.User{}.TableName()).Not("status", 0)
+	db := s.db.Table(usermodel.TableName).Not("status", 0)
 
 	if err := db.Count(&paging.Total).Error; err != nil {
 		return nil, err
 	}
 
-	offset := (paging.Page - 1) * paging.Limit
+	if paging.FakeCursor != "" {
+		id, err := common.DecodeUID(paging.FakeCursor)
 
-	if err := db.Offset(offset).Limit(paging.Limit).Order("created_at desc").Find(&result).Error; err != nil {
+		if err != nil {
+			return nil, err
+		}
+
+		db = db.Where("id < ?", id)
+	} else {
+		offset := (paging.Page - 1) * paging.Limit
+
+		db = db.Offset(offset)
+	}
+
+	if err := db.Limit(paging.Limit).Order("id desc").Find(&users).Error; err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	if len(users) > 0 {
+		last := users[len(users)-1]
+
+		paging.NextCursor = common.EncodeUID(last.ID)
+	}
+
+	return users, nil
 }

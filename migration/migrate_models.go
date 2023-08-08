@@ -2,17 +2,19 @@ package migration
 
 import (
 	"fmt"
-	"go-api/config/db"
+	"go-api/component/appctx"
 	usermodel "go-api/module/user/model"
 	"log"
 )
 
-func init() {
-	fmt.Println("Migrating models...")
+func Migrate(appctx appctx.AppContext) {
+	fmt.Println("Migrating...")
 
-	if err := db.GetConnection().AutoMigrate(&usermodel.User{}); err != nil {
+	db := appctx.GetMainDBConnection()
+
+	if err := db.AutoMigrate(&usermodel.User{}); err != nil {
 		log.Fatal(err)
 	} else {
-		fmt.Println("Migrated models successfully!")
+		fmt.Println("Migrating successfully")
 	}
 }
